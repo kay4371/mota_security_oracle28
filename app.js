@@ -6077,6 +6077,101 @@ app.get('/get_new__visitor_details', async function (req, res) {
 
 
 
+app.get('/get_expected_visitors', async function (req, res) {
+  try {
+    await client.connect();
+    const database = client.db('olukayode_sage');
+    // const collection = database.collection('olukayode_collection');
+    const collection = database.collection('Visitors_details_Database');
+    const expectedVisitors = await collection.find({}).toArray();
+    console.log(' Expected visitors :', expectedVisitors);
+
+    res.json(expectedVisitors);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('An error occurred while retrieving expected visitors');
+  } finally {
+    await client.close();
+  }
+})
+  ;
+
+
+
+
+app.post('/notify_the_host', (req, res) => {
+  // Extract data from the request body
+  const { name, whomToSee, company, purposeOfVisit, phoneNumber, status, date, time } = req.body;
+
+  // You can do something with the received data here, for example, logging it
+  console.log('Received notification:');
+  console.log('Name:', name);
+  console.log('Whom to See:', whomToSee);
+  console.log('Address:', company);
+  console.log('Purpose of Visit:', purposeOfVisit);
+  console.log('Phone Number:', phoneNumber);
+  console.log('Status:', status);
+  console.log('Date:', date);
+  console.log('Time:', time);
+
+  // Send a response back to the client
+  res.status(200).json({ message: 'Notification received successfully' });
+});
+
+app.get('/get_driver_details', async function (req, res) {
+  try {
+    await client.connect();
+    const database = client.db('olukayode_sage');
+    const collection = database.collection('drivers_details');
+    // const collection = database.collection('Visitors_details_Database');
+    const drivers_details = await collection.find({}).toArray();
+    console.log(' Expected visitors :', drivers_details);
+
+    res.json(drivers_details);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('An error occurred while retrieving drivers details');
+  } finally {
+    await client.close();
+  }
+})
+
+
+////////////////////////perfect use
+
+app.post('/movement_history', async function (req, res) {
+  const driverDetails = {
+    driver_name: req.body.driver_name,
+    armed_guard: req.body.armed_guard,
+    target_location: req.body.target_location,
+    passenger: req.body.passenger,
+    vehicle_number: req.body.vehicle_number,
+    time_out: req.body.time_out,
+  };
+
+  try {
+    const client = new MongoClient(uri);
+    await client.connect();
+
+    const database = client.db('olukayode_sage');
+    const kaydata = database.collection('movement_history_database');
+    const drivers_details = database.collection('drivers_details');
+
+    const result = await kaydata.insertOne(driverDetails);
+
+    console.log('Movement added to history:', result.insertedId);
+
+    console.log('Before deletion: Trying to delete', driverDetails.driver_name);
+    const deleteResult = await drivers_details.deleteOne({ driver_name: driverDetails.driver_name });
+    console.log('Deletion result:', deleteResult);
+
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('An error occurred while adding the movement to history and deleting from drivers');
+  } finally {
+    await client.close();
+  }
+});
 
 
 
