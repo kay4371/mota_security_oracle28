@@ -5978,346 +5978,78 @@ async function queryMongoForAllDataAndLog() {
 
 
 
-app.get('/sse', (req, res) => {
-  res.writeHead(200, {
-    'Content-Type': 'text/event-stream',
-    'Cache-Control': 'no-cache',
-    'Connection': 'keep-alive',
+
+
+// WebSocket server logic for HR namespace
+wss.on('connection', (ws, req) => {
+  const pathname = req.url;
+  const isHRNamespace = pathname === '/hr_namespace';
+  const isSecurityNamespace = pathname === '/security_namespace';
+
+  if (isHRNamespace) {
+    console.log('HR unit connected.');
+
+    // Listen for messages from HR unit
+    ws.on('message', (message) => {
+      // Handle HR unit's messages
+      console.log(`Received HR message: ${message}`);
+    });
+  // Handle errors on WebSocket connection
+  ws.on('error', (error) => {
+    console.error('WebSocket error:', error);
   });
 
-  res.write('\n');
+    // Handle disconnection
+    ws.on('close', () => {
+      console.log('HR unit disconnected.');
+      hrClients.delete(ws); // Remove the client from the HR set
+    });
+  } else if (isSecurityNamespace) {
+    console.log('Security unit connected.');
 
-  // Add the client to the array
-  sseClients.push(res);
-
-  // Remove the client when the connection is closed
-  req.on('close', () => {
-    const index = sseClients.indexOf(res);
-    if (index !== -1) {
-      sseClients.splice(index, 1);
-    }
-  });
+    // Listen for messages from security unit
+    ws.on('message', (message) => {
+      // Handle security unit's messages
+      console.log(`Received security message: ${message}`);
+    });
+// Handle errors on WebSocket connection
+ws.on('error', (error) => {
+  console.error('WebSocket error:', error);
 });
-// Function to send SSE updates to all connected clients
-function sendSSEUpdate(message) {
-  sseClients.forEach(client => {
-    client.write(`data: ${JSON.stringify(message)}\n\n`);
-  });
+    // Handle disconnection
+    ws.on('close', () => {
+      console.log('Security unit disconnected.');
+      securityClients.delete(ws); // Remove the client from the security set
+    });
+  }
+});
+
+
+function formatTime(hours, minutes) {
+  // Convert hours to 12-hour format and determine AM/PM
+  const ampm = hours >= 12 ? 'pm' : 'am';
+  const formattedHours = hours % 12 || 12; // Convert 0 to 12 for midnight
+
+  // Pad minutes with leading zero if needed
+  const formattedMinutes = minutes < 10 ? `0${minutes}` : minutes;
+
+  // Get the current date for the month and year
+  const currentDate = new Date();
+  const month = currentDate.getMonth() + 1; // Month is zero-indexed
+  const year = currentDate.getFullYear().toString().slice(-2);
+
+  // Format the date in MM/DD/YY format
+  const formattedDate = `${month}/${formattedHours}/${year}`;
+
+  // Combine the formatted time and date
+  const formattedTime = `${formattedHours}:${formattedMinutes}${ampm} ${formattedDate}`;
+
+  return formattedTime;
 }
 
 
 
-app.post('/awaiting_visitor', async function (req, res) {
-  const registrationDate = new Date();
 
-  // Format the registration date
-  const formattedDate = registrationDate.toLocaleString('en-US', {
-    hour: 'numeric',
-    minute: 'numeric',
-    hour12: true,
-    day: 'numeric',
-    month: 'short', // Use 'short' to get abbreviated month names
-    year: '2-digit',
-  });
-
-  const awaiting_visitorDetails = {
-    registrationDate: formattedDate, // Save the formatted date to the database
-    name: req.body.name,
-    address: req.body.company,
-    whomToSee: req.body.whomToSee,
-    purposeOfVisit: req.body.purposeOfVisit,
-  };
-
-  try {
-    await client.connect(); // Connect to the MongoDB client
-    const database = client.db("olukayode_sage");
-    const collection = database.collection('New_visitors_details_Database');
-
-    // Save the visitor details to the database
-    const result = await collection.insertOne(awaiting_visitorDetails);
-
-    console.log(' New visitors :', result);
-
-    // Send SSE to receptionist page
-    sendSSEUpdate({
-      type: 'new_visitor',
-      visitorName: awaiting_visitorDetails.name,
-      registrationDate: formattedDate,
-      whomToSee: awaiting_visitorDetails.whomToSee,
-      purposeOfVisit: awaiting_visitorDetails.purposeOfVisit,
-    });
-
-    res.send(`Visitor details uploaded successfully at ${formattedDate}`);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('An error occurred while uploading awaiting visitor details');
-  } finally {
-    await client.close(); // Close the MongoDB client connection
-  }
-});
-
-
-app.get('/get_new__visitor_details', async function (req, res) {
-  try {
-    await client.connect(); // Connect to the MongoDB client
-    const database = client.db('olukayode_sage');
-    const collection = database.collection('New_visitors_details_Database');
-
-    // Fetch all visitor details from the database
-    const visitorDetails = await collection.find().toArray();
-
-    res.json(visitorDetails); // Send the visitor details as a JSON response
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('An error occurred while fetching visitor details');
-  } finally {
-    await client.close(); // Close the MongoDB client connection
-  }
-});
-
-
-
-app.get('/get_expected_visitors', async function (req, res) {
-  try {
-    await client.connect();
-    const database = client.db('olukayode_sage');
-    // const collection = database.collection('olukayode_collection');
-    const collection = database.collection('Visitors_details_Database');
-    const expectedVisitors = await collection.find({}).toArray();
-    console.log(' Expected visitors :', expectedVisitors);
-
-    res.json(expectedVisitors);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('An error occurred while retrieving expected visitors');
-  } finally {
-    await client.close();
-  }
-})
-  ;
-
-
-
-
-app.post('/notify_the_host', (req, res) => {
-  // Extract data from the request body
-  const { name, whomToSee, company, purposeOfVisit, phoneNumber, status, date, time } = req.body;
-
-  // You can do something with the received data here, for example, logging it
-  console.log('Received notification:');
-  console.log('Name:', name);
-  console.log('Whom to See:', whomToSee);
-  console.log('Address:', company);
-  console.log('Purpose of Visit:', purposeOfVisit);
-  console.log('Phone Number:', phoneNumber);
-  console.log('Status:', status);
-  console.log('Date:', date);
-  console.log('Time:', time);
-
-  // Send a response back to the client
-  res.status(200).json({ message: 'Notification received successfully' });
-});
-
-app.get('/get_driver_details', async function (req, res) {
-  try {
-    await client.connect();
-    const database = client.db('olukayode_sage');
-    const collection = database.collection('drivers_details');
-    // const collection = database.collection('Visitors_details_Database');
-    const drivers_details = await collection.find({}).toArray();
-    console.log(' Expected visitors :', drivers_details);
-
-    res.json(drivers_details);
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('An error occurred while retrieving drivers details');
-  } finally {
-    await client.close();
-  }
-})
-
-
-////////////////////////perfect use
-
-app.post('/movement_history', async function (req, res) {
-  const driverDetails = {
-    driver_name: req.body.driver_name,
-    armed_guard: req.body.armed_guard,
-    target_location: req.body.target_location,
-    passenger: req.body.passenger,
-    vehicle_number: req.body.vehicle_number,
-    time_out: req.body.time_out,
-  };
-
-  try {
-    const client = new MongoClient(uri);
-    await client.connect();
-
-    const database = client.db('olukayode_sage');
-    const kaydata = database.collection('movement_history_database');
-    const drivers_details = database.collection('drivers_details');
-
-    const result = await kaydata.insertOne(driverDetails);
-
-    console.log('Movement added to history:', result.insertedId);
-
-    console.log('Before deletion: Trying to delete', driverDetails.driver_name);
-    const deleteResult = await drivers_details.deleteOne({ driver_name: driverDetails.driver_name });
-    console.log('Deletion result:', deleteResult);
-
-  } catch (error) {
-    console.error(error);
-    res.status(500).send('An error occurred while adding the movement to history and deleting from drivers');
-  } finally {
-    await client.close();
-  }
-});
-
-
-
-
-
-
-
-// // // serverWebSocket.on('connection', (ws) => {
-// // //   console.log('WebSocket connection established');
-
-// // //   // Handle incoming WebSocket messages from clients
-// // //   ws.on('message', (message) => {
-// // //     console.log(`Received: ${message}`);
-// // //   });
-
-// // //   // Handle WebSocket errors
-// // //   ws.on('error', (error) => {
-// // //     console.error('WebSocket error:', error);
-// // //     // Optionally, you can close the connection or perform any other cleanup here
-// // //   });
-
-// // //   // Add the client to the appropriate client list based on the purpose
-// // //   ws.on('close', () => {
-// // //     console.log('WebSocket connection closed');
-// // //     // Add logic here to remove the client from the appropriate client list
-// // //   });
-// // // });
-
-// // // // correct second2
-// // // app.get('/events', (req, res) => {
-// // //   res.setHeader('Content-Type', 'text/event-stream');
-// // //   res.setHeader('Cache-Control', 'no-cache');
-// // //   res.setHeader('Connection', 'keep-alive');
-
-// // //   // Add the response object to the SSE clients array
-// // //   sseClients.push(res);
-
-// // //   req.on('close', () => {
-// // //     // Remove the closed response object from the SSE clients array
-// // //     const index = sseClients.indexOf(res);
-// // //     if (index !== -1) {
-// // //       sseClients.splice(index, 1);
-// // //     }
-// // //     // Close the response stream
-// // //     res.end();
-// // //   });
-// // //  // Handle SSE errors
-// // //  res.on('error', (error) => {
-// // //   console.error('SSE error:', error);
-// // //   // Optionally, you can close the connection or perform any other cleanup here
-// // // });
-// // // });
-////////////////////////////////////////////////////////////
-
-// async function main() {
-//   try {
-//     const client = new MongoClient(mongoUrl, { useNewUrlParser: true, useUnifiedTopology: true });
-//     await client.connect();
-//     const db = client.db(dbName);
-//     const collectionName = 'drivers_details';
-//     const collection = db.collection(collectionName);
-
-//     const changeStream = collection.watch();
-
-//     changeStream.on('change', (next) => {
-//       console.log('Change detected:', next);
-
-//       if (next.operationType === 'insert') {
-//         const newEntry = next.fullDocument;
-
-//         // Send the new entry to all connected SSE clients
-//         sseClients.forEach((client) => {
-//           client.write(`data: ${JSON.stringify(newEntry)}\n\n`);
-//         });
-//       }
-//     });
-
-//     console.log('Change stream is running...');
-//   } catch (error) {
-//     console.error('Error:', error);
-//   }
-// }
-
-// // Call the main function to start the change stream
-// main();
-// /////////////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-
-// app.post('/checkname', (req, res) => {
-//   const userName = req.body.name.toLowerCase();
-  
-//   if (userName === 'homer') {
-//     res.status(401).send({ message: "Sorry, no Homer's!" });
-//     return;
-//   }
-
-//   // Fetch organic data and send response
-//   getOrganicData(userName)
-//     .then((organicResults) => {
-//       res.json({ organicResults });
-//     })
-//     .catch((error) => {
-//       console.error('Error fetching organic data:', error);
-//       res.status(500).send({ message: 'Internal server error' });
-//     });
-// });
-
-// // Function to fetch organic search results
-// function getOrganicData(userName) {
-//   return new Promise((resolve, reject) => {
-//     const userLocation = userName; // Assuming user's location details come from the name
-//     const userSpecific = 'crime' + userLocation;
-//     const webLink = `https://www.google.com/search?q=${encodeURIComponent(userSpecific)}&gl=us&hl=en`;
-
-//     unirest
-//       .get(webLink)
-//       .headers({
-//         'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/101.0.4951.54 Safari/537.36',
-//       })
-//       .then((response) => {
-//         const $ = cheerio.load(response.body);
-//         const organicResults = [];
-
-//         $(".yuRUbf > a").each((i, el) => {
-//           const title = $(el).find('h3').text();
-//           const link = $(el).attr('href');
-//           const snippet = $(el).parent().find('.IsZvec').text(); // Assuming this class is for snippets
-//           const displayedLink = $(el).find('.tjvcx').text(); // Assuming this class is for displayed links
-          
-//           organicResults.push({
-//             title,
-//             link,
-//             snippet,
-//             displayedLink,
-//           });
-//         });
-
-//         resolve(organicResults);
-//       })
-//       .catch((error) => {
-//         reject(error);
-//       });
-//   });
-// }
 ///////////////////////////////////////////////////////////////
 
 
