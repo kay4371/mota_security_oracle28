@@ -6007,6 +6007,75 @@ function sendSSEUpdate(message) {
 
 
 
+app.post('/awaiting_visitor', async function (req, res) {
+  const registrationDate = new Date();
+
+  // Format the registration date
+  const formattedDate = registrationDate.toLocaleString('en-US', {
+    hour: 'numeric',
+    minute: 'numeric',
+    hour12: true,
+    day: 'numeric',
+    month: 'short', // Use 'short' to get abbreviated month names
+    year: '2-digit',
+  });
+
+  const awaiting_visitorDetails = {
+    registrationDate: formattedDate, // Save the formatted date to the database
+    name: req.body.name,
+    address: req.body.company,
+    whomToSee: req.body.whomToSee,
+    purposeOfVisit: req.body.purposeOfVisit,
+  };
+
+  try {
+    await client.connect(); // Connect to the MongoDB client
+    const database = client.db("olukayode_sage");
+    const collection = database.collection('New_visitors_details_Database');
+
+    // Save the visitor details to the database
+    const result = await collection.insertOne(awaiting_visitorDetails);
+
+    console.log(' New visitors :', result);
+
+    // Send SSE to receptionist page
+    sendSSEUpdate({
+      type: 'new_visitor',
+      visitorName: awaiting_visitorDetails.name,
+      registrationDate: formattedDate,
+      whomToSee: awaiting_visitorDetails.whomToSee,
+      purposeOfVisit: awaiting_visitorDetails.purposeOfVisit,
+    });
+
+    res.send(`Visitor details uploaded successfully at ${formattedDate}`);
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('An error occurred while uploading awaiting visitor details');
+  } finally {
+    await client.close(); // Close the MongoDB client connection
+  }
+});
+
+
+app.get('/get_new__visitor_details', async function (req, res) {
+  try {
+    await client.connect(); // Connect to the MongoDB client
+    const database = client.db('olukayode_sage');
+    const collection = database.collection('New_visitors_details_Database');
+
+    // Fetch all visitor details from the database
+    const visitorDetails = await collection.find().toArray();
+
+    res.json(visitorDetails); // Send the visitor details as a JSON response
+  } catch (error) {
+    console.error(error);
+    res.status(500).send('An error occurred while fetching visitor details');
+  } finally {
+    await client.close(); // Close the MongoDB client connection
+  }
+});
+
+
 
 
 
